@@ -3,23 +3,18 @@
 // Package binary implements a binary tree.
 package binary
 
+import (
+	"fmt"
+	"strings"
+)
+
 // A Node is an element in a binary tree.
 type Node struct {
 	// left and right are pointers to the children of the Node.
 	left, right *Node
 
-	// Value contains the data for this node.
+	// Value contains the Value for this node.
 	Value interface{}
-}
-
-// Left returns this Node's left child or nil.
-func (n *Node) Left() *Node {
-	return n.left
-}
-
-// Right returns this Node's right child or nil.
-func (n *Node) Right() *Node {
-	return n.right
 }
 
 // A Tree represents a binary search tree.
@@ -51,7 +46,7 @@ func visitInOrder(with VisitorFunc, subtreeRoot *Node) bool {
 		return Continue
 	}
 
-	if Done == visitInOrder(with, subtreeRoot.Left()) {
+	if Done == visitInOrder(with, subtreeRoot.left) {
 		return Done
 	}
 
@@ -59,7 +54,7 @@ func visitInOrder(with VisitorFunc, subtreeRoot *Node) bool {
 		return Done
 	}
 
-	return visitInOrder(with, subtreeRoot.Right())
+	return visitInOrder(with, subtreeRoot.right)
 }
 
 // VisitInOrder visits the Nodes of a Tree in order.
@@ -79,7 +74,7 @@ func visitInReverse(with VisitorFunc, subtreeRoot *Node) bool {
 		return Continue
 	}
 
-	if Done == visitInOrder(with, subtreeRoot.Right()) {
+	if Done == visitInOrder(with, subtreeRoot.right) {
 		return Done
 	}
 
@@ -87,7 +82,7 @@ func visitInReverse(with VisitorFunc, subtreeRoot *Node) bool {
 		return Done
 	}
 
-	return visitInOrder(with, subtreeRoot.Left())
+	return visitInOrder(with, subtreeRoot.left)
 }
 
 // VisitInReverse visits the Nodes of a tree in postfix or reverse order.
@@ -98,4 +93,123 @@ func visitInReverse(with VisitorFunc, subtreeRoot *Node) bool {
 func (t *Tree) VisitInReverse(with VisitorFunc) {
 	_ = visitInReverse(with, t.root)
 	return
+}
+
+const (
+	LT = -1
+	EQ = 0
+	GT = 1
+)
+
+// A Comparable is a type that supports the Compare function.
+type Comparable interface {
+	// Compare returns an int that indicates how the Comparable
+	// compares in value to the input. Compare should return
+	// a negative value if the Comparable is less than the input;
+	// zero if the Comparable equals the input; and a positive value
+	// if the Comparable is greater than the input.
+	// Use the LT, EQ, and GT constants to simplify this.
+	Compare(interface{}) int
+}
+
+// A CompareFunc is a function that supports the Comparable interface.
+type CompareFunc func(interface{}) int
+
+// Compare implements the Comparable interface for a CompareFunc.
+func (c CompareFunc) Compare(item interface{}) int {
+	return c(item)
+}
+
+// Some common comparison strategies
+// String performs a string comparison.
+// Optionally, the comparison can be case-insensitive by
+// setting the second parameter to true.
+func String(value string, ignoreCase bool) CompareFunc {
+	if ignoreCase {
+		value = strings.ToLower(value)
+	}
+
+	return func(item interface{}) int {
+		var str = fmt.Sprintf("%v", item)
+		if ignoreCase {
+			str = strings.ToLower(str)
+		}
+		if value < str {
+			return LT
+		}
+		if value > str {
+			return GT
+		}
+		return EQ
+	}
+}
+
+// Int performs an integer comparison between
+// its value and the input items.
+func Int(value int) CompareFunc {
+	return func(item interface{}) int {
+		switch i := item.(int); {
+		case value < i:
+			return LT
+		case value > i:
+			return GT
+		default:
+			return EQ
+		}
+	}
+}
+
+// Float64 performs a float64 comparison between
+// its value and the input items.
+func Float64(value float64) CompareFunc {
+	return func(item interface{}) int {
+		switch f := item.(float64); {
+		case value < f:
+			return LT
+		case value > f:
+			return GT
+		default:
+			return EQ
+		}
+	}
+}
+
+// Contains searches the tree for a given item and returns true if it is
+// found.
+// Contains traverses the tree using a binary search pattern and compares
+// the item to the Value of each node of the tree.
+func (t *Tree) Contains(item Comparable) bool {
+	var cur, found = t.root, false
+
+	for !found && cur != nil {
+		switch result := item.Compare(cur.Value); {
+		case result < EQ:
+			cur = cur.left
+		case result > EQ:
+			cur = cur.right
+		default:
+			found = true
+		}
+	}
+
+	return found
+}
+
+// Get retrieves an item from the tree.
+// If the item is not in the tree, it will return nil instead.
+func (t *Tree) Get(item Comparable) interface{} {
+	var cur = t.root
+
+	for cur != nil {
+		switch result := item.Compare(cur.Value); {
+		case result < EQ:
+			cur = cur.left
+		case result > EQ:
+			cur = cur.right
+		default:
+			return cur.Value
+		}
+	}
+
+	return nil
 }
