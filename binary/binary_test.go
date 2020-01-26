@@ -153,3 +153,158 @@ func TestGet(t *testing.T) {
 		})
 	}
 }
+
+func TestInsert_AddsNewItemsToRightLocation(t *testing.T) {
+	var buf = new(bytes.Buffer)
+	new(Tree).
+		Insert(String("M", false)).
+		Insert(String("L", false)).
+		Insert(String("R", false)).
+		VisitInOrder(PrintNodeTo(buf))
+
+	var want, got = "L\nM\nR\n", buf.String()
+	assert.Equal(t, want, got)
+}
+
+func TestGenericInterface_ReturnsValue(t *testing.T) {
+	want := 1
+	got := Generic(1, func(interface{}, interface{}) int { return 0 }, func(interface{}) {}).Value()
+	assert.Equal(t, want, got)
+}
+
+func TestGenericInterface_Compares(t *testing.T) {
+	want := -1
+	got := Generic(1,
+		func(interface{}, interface{}) int {
+			return -1
+		}, nil).Compare(2)
+	assert.Equal(t, want, got)
+}
+
+func TestGeneric_PanicsIfNilComparer(t *testing.T) {
+	assert.Panics(t, func() {
+		_ = Generic(0, nil, nil)
+	})
+}
+
+func TestGeneric_DoesNotPanicIfUpdaterIsNil(t *testing.T) {
+	assert.NotPanics(t, func() {
+		_ = Generic(0, func(interface{}, interface{}) int { return 0 }, nil)
+	})
+}
+
+func TestGenericInterface_Updates(t *testing.T) {
+	var want, got = 1, 0
+	Generic(0,
+		func(value, to interface{}) int {
+			return 0
+		},
+		func(with interface{}) {
+			got = 1
+		}).Update(0)
+
+	assert.Equal(t, want, got)
+}
+
+func TestGenericInterface_NoPanicIfUpdateWithNilUpdater(t *testing.T) {
+	assert.NotPanics(t, func() {
+		Generic(0, func(interface{}, interface{}) int { return 0 }, nil).Update(0)
+	})
+}
+
+func TestGenericInterface_CompareReturnsLTGT(t *testing.T) {
+	tt := []struct {
+		name string
+		arg  int
+		want int
+	}{
+		{"LT", 2, LT},
+		{"GT", -2, GT},
+		{"EQ", 0, EQ},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			var want = tc.want
+			var got = Generic(0, func(value, to interface{}) int {
+				return value.(int) - to.(int)
+			}, nil).Compare(tc.arg)
+
+			assert.Equal(t, want, got)
+		})
+	}
+}
+
+func TestInt_Value(t *testing.T) {
+	var want = 1
+	var got = Int(want).Value()
+	assert.Equal(t, want, got)
+}
+
+func TestInt_Compare(t *testing.T) {
+	tt := []struct {
+		name string
+		arg  int
+		want int
+	}{
+		{"LT", 1, LT},
+		{"GT", -1, GT},
+		{"EQ", 0, EQ},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			want := tc.want
+			got := Int(0).Compare(tc.arg)
+			assert.Equal(t, want, got)
+		})
+	}
+}
+
+func TestTreeInsert_UpdatesExistingNode(t *testing.T) {
+	var want, got = 1, 0
+	new(Tree).
+		Insert(
+			Generic(
+				0,
+				func(this, to interface{}) int {
+					return EQ
+				},
+				func(with interface{}) {
+					got++
+				},
+			)).
+		Insert(Int(0))
+
+	assert.Equal(t, want, got)
+}
+
+func TestTreeRemove(t *testing.T) {
+	tt := []struct {
+		name string
+		arg  string
+		want string
+	}{
+		{"Left", "L", "M\nQ\nR\nT\n"},
+		{"Right", "R", "L\nM\nQ\nT\n"},
+		{"Root", "M", "L\nQ\nR\nT\n"},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf = new(bytes.Buffer)
+			new(Tree).
+				Insert(String("L", false)).
+				Insert(String("M", false)).
+				Insert(String("R", false)).
+				Insert(String("T", false)).
+				Insert(String("Q", false)).
+				Remove(String(tc.arg, false)).
+				VisitInOrder(PrintNodeTo(buf))
+
+			var want, got = tc.want, buf.String()
+			assert.Equal(t, want, got)
+
+		})
+	}
+}

@@ -1,46 +1,8 @@
 // Copyright 2020 Matthew Burr
 //
+
 // Package binary implements a binary tree.
 package binary
-
-import (
-	"fmt"
-	"strings"
-)
-
-const (
-	// LT indicates a comparison resulted in Less Than
-	LT = -1
-	// EQ indicates a comparison resulted in Equal
-	EQ = 0
-	// GT indicates a comparison result in Greater Than
-	GT = 1
-)
-
-// Interface describes the functions a type
-// should support to work with the binary tree.
-type Interface interface {
-	// Compare compares this object to another and
-	// returns an integer to indicate how the two
-	// equate:
-	// -1 = this object is less than the one passed in
-	// 0 = this object is equal to the one passed in
-	// 1 = this object is greater than the one passed in
-	// This package provides the LT, EQ, and GT constants
-	// to simplify this.
-	Compare(interface{}) int
-	// Value returns the underlying value of this interface.
-	// This is the raw data that will be stored in the Node.
-	Value() interface{}
-	// The binary tree calls Update when an attempt is made
-	// to insert a value that matches an already existing
-	// value in the tree.
-	// The binary tree calls update on the value that is
-	// already in the tree and passes in the incoming value,
-	// giving the existing value an opportunity to decide
-	// what to do with the new value.
-	Update(interface{})
-}
 
 // A Node is an element in a binary tree.
 type Node struct {
@@ -69,7 +31,7 @@ func (n *Node) Compare(to interface{}) int {
 	}
 }
 
-// valud returns the value stored in this Node.
+// Value returns the value stored in this Node.
 func (n *Node) Value() interface{} {
 	return n.value.Value()
 }
@@ -77,61 +39,6 @@ func (n *Node) Value() interface{} {
 // Update updates the value stored in this Node.
 func (n *Node) Update(with interface{}) {
 	n.value.Update(with)
-	return
-}
-
-// stringInterface is an implementation of Interface
-// that works with strings.
-type stringInterface struct {
-	value      string
-	ignoreCase bool
-}
-
-// String wraps a string in an Interface.
-func String(value string, ignoreCase bool) stringInterface {
-	return stringInterface{
-		value:      value,
-		ignoreCase: ignoreCase,
-	}
-}
-
-// Compare compares this string to another value.
-// Note that although this is a string comparison,
-// the incoming value will be converted to a string
-// before the comparison, so any type can be passed
-// in.
-func (s stringInterface) Compare(to interface{}) int {
-	var value = s.value
-
-	if s.ignoreCase {
-		value = strings.ToLower(value)
-	}
-
-	var str = fmt.Sprintf("%v", to)
-
-	if s.ignoreCase {
-		str = strings.ToLower(str)
-	}
-
-	if value < str {
-		return LT
-	}
-
-	if value > str {
-		return GT
-	}
-
-	return EQ
-}
-
-// Value returns the string stored in this Interface.
-func (s stringInterface) Value() interface{} {
-	return s.value
-}
-
-// Update does nothing to the string stored in this
-// Interface.
-func (s stringInterface) Update(with interface{}) {
 	return
 }
 
@@ -144,11 +51,13 @@ type Tree struct {
 }
 
 const (
-	Done     = true
+	// Done signals that tree traversal is done.
+	Done = true
+	// Continue signals that tree traversal is not done.
 	Continue = false
 )
 
-// A VistorFunc is an operation to perform on Nodes of a tree.
+// A VisitorFunc is an operation to perform on Nodes of a tree.
 // Visitor functions accept an interface{] as their pattern;
 // the value of the interface{} is the Value of a Node in the tree.
 // Visitors functions return a bool indicating whether to stop
@@ -251,4 +160,121 @@ func (t *Tree) Get(item Interface) interface{} {
 	}
 
 	return nil
+}
+
+// Insert adds an item to the tree if it does
+// not exist in the tree already.
+// If there is already an item in the tree that
+// matches the one you are adding, the tree
+// will call Update on the existing item, passing
+// in the value of the item you are trying to add.
+// To facilitate easily inserting a chain of items,
+// the method returns the Tree after having inserted
+// an item.
+func (t *Tree) Insert(item Interface) *Tree {
+	var cur, parent = t.root, (*Node)(nil)
+	var found = false
+
+	for cur != nil && !found {
+		switch result := item.Compare(cur.Value()); {
+		case result < EQ:
+			parent = cur
+			cur = parent.left
+		case result > EQ:
+			parent = cur
+			cur = parent.right
+		default:
+			found = true
+		}
+	}
+
+	if found {
+		cur.Update(item.Value())
+		return t
+	}
+
+	// If we've reached this point, we didn't
+	// find the item, so we insert a new Node.
+	cur = &Node{value: item}
+	if parent == nil { // Should only happen if there is an empty tree
+		t.root = cur
+	} else if item.Compare(parent.Value()) == LT {
+		parent.left = cur
+	} else {
+		parent.right = cur
+	}
+
+	return t
+}
+
+// findNodeAndParent is used internally to locate a node and its parent.
+func (t *Tree) findNodeAndParent(item Interface) (found bool, node, parent *Node) {
+	found, node, parent = false, t.root, nil
+	for !found && node != nil {
+		switch result := item.Compare(node.Value()); {
+		case result < EQ:
+			parent = node
+			node = parent.left
+		case result > EQ:
+			parent = node
+			node = parent.right
+		default:
+			found = true
+		}
+	}
+	return
+}
+
+// Remove deletes the specified item from the tree (if it exists
+// in the tree) and returns the tree.
+func (t *Tree) Remove(item Interface) *Tree {
+	// The algorithm used here is adapted from Chapter 12 of
+	// "ADTs, Data Structures, and Problem Solving with C++",
+	// by Larry Nyhoff (2nd Edition, 2005, Prentice Hall)
+
+	// First, we need to find the node to delete (if it exists)
+	// along with its parent.
+	var found, node, parent = t.findNodeAndParent(item)
+
+	if !found {
+		return t
+	}
+
+	// If the node we're deleting has two children, we need
+	// to pick one of its subtrees to replace it. Below,
+	// we're picking its right subtree
+	if node.left != nil && node.right != nil {
+		var succ = node.right
+		parent = node
+		// We're going to walk down the left branch of
+		// its right subtree until we can't go any further.
+		for succ.left != nil {
+			parent = succ
+			succ = succ.left
+		}
+		// Basically, instead of deleting the node we originally
+		// found, we're going to replace its value with this
+		// successor node's value, and then set up the successor
+		// node for deletion.
+		node.value = succ.value
+		node = succ
+	}
+
+	// Now, we can just follow a pattern for deleting a node
+	// with, at most, one child.
+	var subtree = node.left
+
+	if subtree == nil {
+		subtree = node.right
+	}
+
+	if parent == nil {
+		t.root = subtree
+	} else if parent.left == node {
+		parent.left = subtree
+	} else {
+		parent.right = subtree
+	}
+
+	return t
 }
