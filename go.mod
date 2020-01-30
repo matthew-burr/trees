@@ -1,4 +1,4 @@
-module matthew-burr/trees
+module github.com/matthew-burr/trees
 
 go 1.13
 
