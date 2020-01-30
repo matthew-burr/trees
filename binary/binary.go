@@ -89,9 +89,9 @@ func visitInOrder(with VisitorFunc, subtreeRoot *Node) bool {
 // value of the Node. VisitInOrder stops visiting
 // when the VisitorFunc returns Done ("true") after
 // visiting the Node.
-func (t *Tree) VisitInOrder(with VisitorFunc) {
+func (t *Tree) VisitInOrder(with VisitorFunc) *Tree {
 	_ = visitInOrder(with, t.root)
-	return
+	return t
 }
 
 // visitInReverse is used internally to visit all the Nodes of a
@@ -117,9 +117,9 @@ func visitInReverse(with VisitorFunc, subtreeRoot *Node) bool {
 // value of the Node. VisitInOrder stops visiting
 // when the VisitorFunc returns Done ("true") after
 // visiting the Node.
-func (t *Tree) VisitInReverse(with VisitorFunc) {
+func (t *Tree) VisitInReverse(with VisitorFunc) *Tree {
 	_ = visitInReverse(with, t.root)
-	return
+	return t
 }
 
 // Contains searches the tree for a given item and returns true if it is
@@ -143,70 +143,6 @@ func (t *Tree) Contains(item Interface) bool {
 	return found
 }
 
-// Get retrieves an item from the tree.
-// If the item is not in the tree, it will return nil instead.
-func (t *Tree) Get(item Interface) interface{} {
-	var cur = t.root
-
-	for cur != nil {
-		switch result := item.Compare(cur.Value()); {
-		case result < EQ:
-			cur = cur.left
-		case result > EQ:
-			cur = cur.right
-		default:
-			return cur.Value()
-		}
-	}
-
-	return nil
-}
-
-// Insert adds an item to the tree if it does
-// not exist in the tree already.
-// If there is already an item in the tree that
-// matches the one you are adding, the tree
-// will call Update on the existing item, passing
-// in the value of the item you are trying to add.
-// To facilitate easily inserting a chain of items,
-// the method returns the Tree after having inserted
-// an item.
-func (t *Tree) Insert(item Interface) *Tree {
-	var cur, parent = t.root, (*Node)(nil)
-	var found = false
-
-	for cur != nil && !found {
-		switch result := item.Compare(cur.Value()); {
-		case result < EQ:
-			parent = cur
-			cur = parent.left
-		case result > EQ:
-			parent = cur
-			cur = parent.right
-		default:
-			found = true
-		}
-	}
-
-	if found {
-		cur.Update(item.Value())
-		return t
-	}
-
-	// If we've reached this point, we didn't
-	// find the item, so we insert a new Node.
-	cur = &Node{value: item}
-	if parent == nil { // Should only happen if there is an empty tree
-		t.root = cur
-	} else if item.Compare(parent.Value()) == LT {
-		parent.left = cur
-	} else {
-		parent.right = cur
-	}
-
-	return t
-}
-
 // findNodeAndParent is used internally to locate a node and its parent.
 func (t *Tree) findNodeAndParent(item Interface) (found bool, node, parent *Node) {
 	found, node, parent = false, t.root, nil
@@ -225,21 +161,60 @@ func (t *Tree) findNodeAndParent(item Interface) (found bool, node, parent *Node
 	return
 }
 
-// Remove deletes the specified item from the tree (if it exists
-// in the tree) and returns the tree.
-func (t *Tree) Remove(item Interface) *Tree {
-	// The algorithm used here is adapted from Chapter 12 of
-	// "ADTs, Data Structures, and Problem Solving with C++",
-	// by Larry Nyhoff (2nd Edition, 2005, Prentice Hall)
+// Get retrieves an item from the tree.
+// If the item is not in the tree, it will return nil instead.
+func (t *Tree) Get(item Interface) interface{} {
+	if found, cur, _ := t.findNodeAndParent(item); found {
+		return cur.Value()
+	}
 
-	// First, we need to find the node to delete (if it exists)
-	// along with its parent.
-	var found, node, parent = t.findNodeAndParent(item)
+	return nil
+}
 
-	if !found {
+// Insert adds an item to the tree if it does
+// not exist in the tree already.
+// If there is already an item in the tree that
+// matches the one you are adding, the tree
+// will call Update on the existing item, passing
+// in the value of the item you are trying to add.
+// To facilitate easily inserting a chain of items,
+// the method returns the Tree after having inserted
+// an item.
+func (t *Tree) Insert(item Interface) *Tree {
+	var found, cur, parent = t.findNodeAndParent(item)
+
+	if found {
+		var before = cur.Value()
+		cur.Update(item.Value())
+
+		// If our update of the value changed the value, then
+		// we remove and re-insert the node to insure it ends
+		// up in the right place.
+		if changed := cur.Compare(before) != EQ; changed {
+			t.removeNode(cur, parent)
+			// Because Node contains original Interface, it
+			// can act as the interface.
+			t.Insert(cur)
+		}
+
 		return t
 	}
 
+	// If we've reached this point, we didn't
+	// find the item, so we insert a new Node.
+	cur = &Node{value: item}
+	if parent == nil { // Should only happen if there is an empty tree
+		t.root = cur
+	} else if item.Compare(parent.Value()) == LT {
+		parent.left = cur
+	} else {
+		parent.right = cur
+	}
+
+	return t
+}
+
+func (t *Tree) removeNode(node, parent *Node) {
 	// If the node we're deleting has two children, we need
 	// to pick one of its subtrees to replace it. Below,
 	// we're picking its right subtree
@@ -275,6 +250,24 @@ func (t *Tree) Remove(item Interface) *Tree {
 	} else {
 		parent.right = subtree
 	}
+}
+
+// Remove deletes the specified item from the tree (if it exists
+// in the tree) and returns the tree.
+func (t *Tree) Remove(item Interface) *Tree {
+	// The algorithm used here is adapted from Chapter 12 of
+	// "ADTs, Data Structures, and Problem Solving with C++",
+	// by Larry Nyhoff (2nd Edition, 2005, Prentice Hall)
+
+	// First, we need to find the node to delete (if it exists)
+	// along with its parent.
+	var found, node, parent = t.findNodeAndParent(item)
+
+	if !found {
+		return t
+	}
+
+	t.removeNode(node, parent)
 
 	return t
 }

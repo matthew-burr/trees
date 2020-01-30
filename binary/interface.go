@@ -45,7 +45,7 @@ type CompareFunc func(this, to interface{}) int
 
 // An UpdateFunc is a function that can be used to
 // update a value.
-type UpdateFunc func(with interface{})
+type UpdateFunc func(this, with interface{}) interface{}
 
 // A InterfaceImpl is a generic implementation of
 // interface that can be used to wrap values of
@@ -57,12 +57,12 @@ type InterfaceImpl struct {
 }
 
 // Value returns the value of this Interface.
-func (c InterfaceImpl) Value() interface{} {
+func (c *InterfaceImpl) Value() interface{} {
 	return c.value
 }
 
 // Compare compare's this Interface's value to another value.
-func (c InterfaceImpl) Compare(to interface{}) int {
+func (c *InterfaceImpl) Compare(to interface{}) int {
 	switch result := c.comp(c.value, to); {
 	case result < EQ:
 		return LT
@@ -74,12 +74,12 @@ func (c InterfaceImpl) Compare(to interface{}) int {
 }
 
 // Update updates the value in the interface.
-func (c InterfaceImpl) Update(with interface{}) {
+func (c *InterfaceImpl) Update(with interface{}) {
 	if c.upd == nil {
 		return
 	}
 
-	c.upd(with)
+	c.value = c.upd(c.value, with)
 	return
 }
 
@@ -91,12 +91,12 @@ func (c InterfaceImpl) Update(with interface{}) {
 // value to another value.
 // Updater (optional) is a function that can be used to update the value stored
 // in the interface. If not supplied, then a call to Interface.Update is a no-op.
-func Generic(value interface{}, comparer CompareFunc, updater UpdateFunc) InterfaceImpl {
+func Generic(value interface{}, comparer CompareFunc, updater UpdateFunc) *InterfaceImpl {
 	if comparer == nil {
 		panic("you must provide a comparer function")
 	}
 
-	return InterfaceImpl{
+	return &InterfaceImpl{
 		value: value,
 		comp:  comparer,
 		upd:   updater,
@@ -104,7 +104,7 @@ func Generic(value interface{}, comparer CompareFunc, updater UpdateFunc) Interf
 }
 
 // String wraps a string in an Interface.
-func String(value string, ignoreCase bool) InterfaceImpl {
+func String(value string, ignoreCase bool) *InterfaceImpl {
 	return Generic(
 		value,
 		func(this, to interface{}) int {
@@ -134,7 +134,7 @@ func String(value string, ignoreCase bool) InterfaceImpl {
 }
 
 // Int wraps an integer in an Interface.
-func Int(value int) InterfaceImpl {
+func Int(value int) *InterfaceImpl {
 	return Generic(
 		value,
 		func(this, to interface{}) int {

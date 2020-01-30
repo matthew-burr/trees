@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"io"
 	"testing"
 	// . "matthew-burr/trees/binary"
@@ -168,7 +169,7 @@ func TestInsert_AddsNewItemsToRightLocation(t *testing.T) {
 
 func TestGenericInterface_ReturnsValue(t *testing.T) {
 	want := 1
-	got := Generic(1, func(interface{}, interface{}) int { return 0 }, func(interface{}) {}).Value()
+	got := Generic(1, func(interface{}, interface{}) int { return 0 }, nil).Value()
 	assert.Equal(t, want, got)
 }
 
@@ -199,8 +200,9 @@ func TestGenericInterface_Updates(t *testing.T) {
 		func(value, to interface{}) int {
 			return 0
 		},
-		func(with interface{}) {
+		func(this, with interface{}) interface{} {
 			got = 1
+			return this
 		}).Update(0)
 
 	assert.Equal(t, want, got)
@@ -270,8 +272,9 @@ func TestTreeInsert_UpdatesExistingNode(t *testing.T) {
 				func(this, to interface{}) int {
 					return EQ
 				},
-				func(with interface{}) {
+				func(this, with interface{}) interface{} {
 					got++
+					return this
 				},
 			)).
 		Insert(Int(0))
@@ -307,4 +310,56 @@ func TestTreeRemove(t *testing.T) {
 
 		})
 	}
+}
+
+func TestTreeInsert_LeavesNodesInProperOrderAfterUpdateChangesValues(t *testing.T) {
+	var tree = new(Tree).
+		Insert(Int(1)).
+		Insert(Int(2)).
+		Insert(Generic(
+			3,
+			func(this, to interface{}) int {
+				return this.(int) - to.(int)
+			},
+			func(this, with interface{}) interface{} {
+				return this.(int) * 0
+			},
+		))
+
+	var buf = new(bytes.Buffer)
+	tree.Insert(Int(3)).VisitInOrder(PrintNodeTo(buf))
+
+	var want, got = "0\n1\n2\n", buf.String()
+
+	assert.Equal(t, want, got)
+}
+
+func TestTreeInsert_ChainOfUpdates(t *testing.T) {
+	var comparer = func(this, to interface{}) int {
+		return this.(int) - to.(int)
+	}
+
+	var updater = func(this, with interface{}) interface{} {
+		return this.(int) + 1
+	}
+
+	var item = func(i int) *InterfaceImpl {
+		return Generic(i, comparer, updater)
+	}
+
+	var buf = new(bytes.Buffer)
+	var tree = new(Tree).
+		Insert(item(0)).
+		Insert(item(1)).
+		Insert(item(2)).
+		VisitInOrder(PrintNodeTo(buf))
+
+	var want, got = "0\n1\n2\n", buf.String()
+	require.Equal(t, want, got)
+
+	buf = new(bytes.Buffer)
+	tree = tree.Insert(item(0)).VisitInOrder(PrintNodeTo(buf))
+
+	want, got = "3\n", buf.String()
+	assert.Equal(t, want, got)
 }
